@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notion-like Productivity App</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .block-hover:hover .block-controls { opacity: 1; }
+        .block-controls { opacity: 0; transition: opacity 0.2s; }
+        .editable { 
+            outline: none; 
+            border: 1px solid transparent; 
+            border-radius: 4px; 
+            padding: 4px 8px; 
+            min-height: 1.5rem;
+            width: 100%;
+        }
+        .editable:focus { 
+            border-color: #3b82f6; 
+            background-color: #fafafa; 
+        }
+        .editable:empty:before {
+            content: attr(data-placeholder);
+            color: #9ca3af;
+        }
+        .sidebar-collapsed { width: 48px; }
+        .sidebar-expanded { width: 256px; }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans">
+    <!-- Main Container -->
+    <div class="min-h-screen flex">
+        <!-- Sidebar -->
+        <aside id="sidebar" class="sidebar-expanded bg-white border-r border-gray-200 flex-shrink-0 transition-all duration-200">
+            <div class="p-4">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="sidebar-content">
+                        <h2 class="font-semibold text-gray-900">Mi Workspace</h2>
+                        <span class="bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded ml-2" id="page-count">1</span>
+                    </div>
+                    <button onclick="toggleSidebar()" class="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded text-sm">
+                        ←
+                    </button>
+                </div>
+                
+                <div class="sidebar-content">
+                    <!-- Search -->
+                    <div class="mb-4">
+                        <input type="text" placeholder="Buscar páginas..." 
+                               class="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    
+                    <!-- New Page Button -->
+                    <button onclick="createNewPage()" 
+                            class="w-full mb-4 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 rounded-md flex items-center">
+                        <span class="mr-2">+</span>
+                        Nueva Página
+                    </button>
+                    
+                    <!-- Pages List -->
+                    <div class="border-t pt-4">
+                        <h3 class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Páginas</h3>
+                        <div id="pages-list">
+                            <div class="page-item flex items-center gap-2 px-2 py-1 text-sm text-gray-700 hover:bg-gray-100 rounded cursor-pointer bg-gray-100" 
+                                 onclick="selectPage('welcome')">
+                                <span>📄</span>
+                                <span>Página de Bienvenida</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Templates -->
+                    <div class="mt-6 border-t pt-4">
+                        <button onclick="showTemplates()" 
+                                class="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 rounded-md flex items-center">
+                            <span class="mr-2">📋</span>
+                            Plantillas
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 flex flex-col min-w-0">
+            <!-- Top Bar -->
+            <header class="bg-white border-b border-gray-200 px-6 py-3">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <span class="text-lg">📄</span>
+                        <h1 id="page-title" class="text-lg font-semibold text-gray-900">Página de Bienvenida</h1>
+                        <span class="bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded" id="block-count">2 bloques</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="showAIAssistant()" 
+                                class="px-3 py-2 text-sm bg-blue-600 text-white hover:bg-blue-700 rounded-md flex items-center gap-2">
+                            <span>✨</span>
+                            Asistente IA
+                        </button>
+                        <button class="px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md">
+                            Compartir
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Editor Area -->
+            <div class="flex-1 overflow-auto">
+                <div class="max-w-4xl mx-auto py-8 px-6">
+                    <!-- Page Title Editor -->
+                    <div class="mb-8">
+                        <input id="title-input" type="text" value="Página de Bienvenida"
+                               class="text-4xl font-bold w-full bg-transparent border-none outline-none text-gray-900"
+                               style="line-height: 1.2;" onblur="updatePageTitle(this.value)"
+                               placeholder="Título de la página">
+                    </div>
+
+                    <!-- Blocks Container -->
+                    <div id="blocks-container" class="space-y-2">
+                        <!-- Blocks will be added here by JavaScript -->
+                    </div>
+
+                    <!-- Add Block Button -->
+                    <div class="mt-8">
+                        <button onclick="addBlock('paragraph')" 
+                                class="inline-flex items-center px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-md border-2 border-dashed border-gray-300 hover:border-gray-400">
+                            <span class="mr-2">+</span>
+                            Agregar bloque
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- AI Assistant Modal -->
+    <div id="ai-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50" onclick="hideAIAssistant()">
+        <div class="bg-white rounded-lg p-6 w-full max-w-md mx-4" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold flex items-center gap-2">
+                    <span>✨</span>
+                    Asistente IA
+                </h3>
+                <button onclick="hideAIAssistant()" class="text-gray-400 hover:text-gray-600">
+                    <span class="text-xl">×</span>
+                </button>
+            </div>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Acción</label>
+                    <select id="ai-action" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="generate">Generar contenido</option>
+                        <option value="improve">Mejorar texto</option>
+                        <option value="summarize">Resumir</option>
+                        <option value="ideas">Generar ideas</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Prompt</label>
+                    <textarea id="ai-prompt" rows="3" 
+                              placeholder="Describe lo que quieres generar..."
+                              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+                </div>
+                
+                <div class="flex gap-2">
+                    <button onclick="generateWithAI()" 
+                            class="flex-1 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
+                        Generar
+                    </button>
+                    <button onclick="hideAIAssistant()" 
+                            class="px-4 py-2 text-gray-600 hover:text-gray-800 border border-gray-300 rounded-md">
+                        Cancelar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Templates Modal -->
+    <div id="templates-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50" onclick="hideTemplates()">
+        <div class="bg-white rounded-lg p-6 w-full max-w-4xl mx-4 max-h-[80vh] overflow-auto" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-xl font-semibold">Plantillas</h3>
+                <button onclick="hideTemplates()" class="text-gray-400 hover:text-gray-600">
+                    <span class="text-xl">×</span>
+                </button>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="templates-grid">
+                <!-- Templates will be populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Block Type Menu Modal -->
+    <div id="block-menu-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50" onclick="hideBlockMenu()">
+        <div class="bg-white rounded-lg p-6 w-full max-w-sm mx-4" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold">Agregar Bloque</h3>
+                <button onclick="hideBlockMenu()" class="text-gray-400 hover:text-gray-600">
+                    <span class="text-xl">×</span>
+                </button>
+            </div>
+            
+            <div class="space-y-2" id="block-types-list">
+                <!-- Block types will be populated -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global state
+        let currentPageId = 'welcome';
+        let pages = {
+            'welcome': {
+                id: 'welcome',
+                title: 'Página de Bienvenida',
+                blocks: [
+                    {
+                        id: 'block-1',
+                        type: 'heading',
+                        content: 'Bienvenido a tu Workspace de Productividad'
+                    },
+                    {
+                        id: 'block-2',
+                        type: 'paragraph',
+                        content: 'Esta es una aplicación estilo Notion con editor de bloques, integración de IA y plantillas. Comienza creando contenido increíble con nuestro editor intuitivo.'
+                    }
+                ]
+            }
+        };
+        
+        let blockCounter = 3;
+        let currentAfterBlockId = null;
+        let sidebarCollapsed = false;
+
+        // Initialize the app
+        function init() {
+            loadFromStorage();
+            renderPage();
+            updatePageCount();
+            renderTemplates();
+        }
+
+        // Storage functions
+        function saveToStorage() {
+            localStorage.setItem('notion-pages', JSON.stringify(pages));
+        }
+
+        function loadFromStorage() {
+            const saved = localStorage.getItem('notion-pages');
+            if (saved) {
+                try {
+                    pages = JSON.parse(saved);
+                } catch (e) {
+                    console.error('Error loading saved pages:', e);
+                }
+            }
+        }
+
+        // Sidebar functions
+        function toggleSidebar() {
+            sidebarCollapsed = !sidebarCollapsed;
+            const sidebar = document.getElementById('sidebar');
+            const sidebarContent = sidebar.querySelectorAll('.sidebar-content');
+            
+            if (sidebarCollapsed) {
+                sidebar.classList.remove('sidebar-expanded');
+                sidebar.classList.add('sidebar-collapsed');
+                sidebarContent.forEach(el => el.style.display = 'none');
+            } else {
+                sidebar.classList.remove('sidebar-collapsed');
+                sidebar.classList.add('sidebar-expanded');
+                sidebarContent.forEach(el => el.style.display = 'block');
+            }
+        }
+
+        // Render current page
+        function renderPage() {
+            const page = pages[currentPageId];
+            if (!page) return;
+
+            document.getElementById('page-title').textContent = page.title;
+            document.getElementById('title-input').value = page.title;
+            
+            const container = document.getElementById('blocks-container');
+            container.innerHTML = '';
+            
+            page.blocks.forEach(block => {
+                const blockElement = createBlockElement(block);
+                container.appendChild(blockElement);
+            });
+            
+            updateBlockCount();
+            saveToStorage();
+        }
+
+        // Create block element
+        function createBlockElement(block) {
+            const div = document.createElement('div');
+            div.className = 'block-hover group relative py-1';
+            div.setAttribute('data-block-id', block.id);
+            
+            let content = '';
+            switch (block.type) {
+                case 'heading':
+                    content = `<input type="text" 
+                                  class="editable text-2xl font-semibold text-gray-900" 
+                                  value="${escapeHtml(block.content)}"
+                                  data-placeholder="Título..."
+                                  onblur="updateBlock('${block.id}', this.value)">`;
+                    break;
+                case 'paragraph':
+                    content = `<textarea 
+                                  class="editable text-gray-800 leading-relaxed resize-none" 
+                                  rows="1"
+                                  data-placeholder="Escribe algo..."
+                                  onblur="updateBlock('${block.id}', this.value)"
+                                  oninput="autoResize(this)">${escapeHtml(block.content)}</textarea>`;
+                    break;
+                case 'list':
+                    content = `<div class="flex items-start gap-3">
+                                 <span class="text-gray-400 mt-1.5">•</span>
+                                 <textarea 
+                                    class="editable text-gray-800 leading-relaxed flex-1 resize-none" 
+                                    rows="1"
+                                    data-placeholder="Elemento de lista..."
+                                    onblur="updateBlock('${block.id}', this.value)"
+                                    oninput="autoResize(this)">${escapeHtml(block.content)}</textarea>
+                               </div>`;
+                    break;
+                case 'todo':
+                    const checked = block.checked ? 'checked' : '';
+                    const strikethrough = block.checked ? 'line-through text-gray-500' : 'text-gray-800';
+                    content = `<div class="flex items-start gap-3">
+                                 <input type="checkbox" ${checked} 
+                                        onchange="toggleTodo('${block.id}', this.checked)" 
+                                        class="mt-1.5 rounded border-gray-300">
+                                 <textarea 
+                                    class="editable ${strikethrough} leading-relaxed flex-1 resize-none" 
+                                    rows="1"
+                                    data-placeholder="Tarea..."
+                                    onblur="updateBlock('${block.id}', this.value)"
+                                    oninput="autoResize(this)">${escapeHtml(block.content)}</textarea>
+                               </div>`;
+                    break;
+                case 'quote':
+                    content = `<blockquote class="border-l-4 border-gray-300 pl-4 italic">
+                                 <textarea 
+                                    class="editable text-gray-600 leading-relaxed resize-none" 
+                                    rows="1"
+                                    data-placeholder="Cita..."
+                                    onblur="updateBlock('${block.id}', this.value)"
+                                    oninput="autoResize(this)">${escapeHtml(block.content)}</textarea>
+                               </blockquote>`;
+                    break;
+                case 'code':
+                    content = `<div class="bg-gray-100 rounded-md p-4">
+                                 <textarea 
+                                    class="editable font-mono text-sm bg-transparent resize-none" 
+                                    rows="3"
+                                    data-placeholder="Escribe tu código..."
+                                    onblur="updateBlock('${block.id}', this.value)"
+                                    spellcheck="false">${escapeHtml(block.content)}</textarea>
+                               </div>`;
+                    break;
+            }
+            
+            div.innerHTML = `
+                ${content}
+                <div class="block-controls absolute left-0 top-0 -ml-12 flex flex-col gap-1">
+                    <button onclick="showBlockMenu('${block.id}')" 
+                            class="w-8 h-8 bg-white border border-gray-200 rounded hover:bg-blue-50 text-gray-600 text-sm">
+                        +
+                    </button>
+                    <button onclick="deleteBlock('${block.id}')" 
+                            class="w-8 h-8 bg-white border border-gray-200 rounded hover:bg-red-50 text-red-600 text-sm">
+                        ×
+                    </button>
+                </div>
+            `;
+            
+            return div;
+        }
+
+        // Utility functions
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function autoResize(textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = textarea.scrollHeight + 'px';
+        }
+
+        // Block operations
+        function addBlock(type, afterBlockId = null) {
+            const page = pages[currentPageId];
+            const newBlock = {
+                id: `block-${blockCounter++}`,
+                type: type,
+                content: '',
+                checked: type === 'todo' ? false : undefined
+            };
+            
+            if (afterBlockId) {
+                const index = page.blocks.findIndex(b => b.id === afterBlockId);
+                page.blocks.splice(index + 1, 0, newBlock);
+            } else {
+                page.blocks.push(newBlock);
+            }
+            
+            renderPage();
+            
+            // Focus the new block
+            setTimeout(() => {
+                const newElement = document.querySelector(`[data-block-id="${newBlock.id}"] .editable`);
+                if (newElement) {
+                    newElement.focus();
+                }
+            }, 100);
+        }
+
+        function updateBlock(blockId, content) {
+            const page = pages[currentPageId];
+            const block = page.blocks.find(b => b.id === blockId);
+            if (block) {
+                block.content = content;
+                saveToStorage();
+            }
+        }
+
+        function deleteBlock(blockId) {
+            const page = pages[currentPageId];
+            if (page.blocks.length <= 1) return; // Keep at least one block
+            
+            page.blocks = page.blocks.filter(b => b.id !== blockId);
+            renderPage();
+        }
+
+        function toggleTodo(blockId, checked) {
+            const page = pages[currentPageId];
+            const block = page.blocks.find(b => b.id === blockId);
+            if (block) {
+                block.checked = checked;
+                renderPage();
+            }
+        }
+
+        function showBlockMenu(blockId) {
+            currentAfterBlockId = blockId;
+            const blockTypes = [
+                { type: 'paragraph', label: 'Párrafo', icon: '📝' },
+                { type: 'heading', label: 'Título', icon: 'H' },
+                { type: 'list', label: 'Lista', icon: '•' },
+                { type: 'todo', label: 'Tarea', icon: '☑️' },
+                { type: 'quote', label: 'Cita', icon: '❝' },
+                { type: 'code', label: 'Código', icon: '💻' },
+            ];
+
+            const list = document.getElementById('block-types-list');
+            list.innerHTML = '';
+            
+            blockTypes.forEach(blockType => {
+                const button = document.createElement('button');
+                button.className = 'w-full text-left px-3 py-2 hover:bg-gray-100 rounded-md flex items-center gap-3';
+                button.innerHTML = `
+                    <span class="text-lg">${blockType.icon}</span>
+                    <span class="font-medium">${blockType.label}</span>
+                `;
+                button.onclick = () => {
+                    addBlock(blockType.type, currentAfterBlockId);
+                    hideBlockMenu();
+                };
+                list.appendChild(button);
+            });
+            
+            document.getElementById('block-menu-modal').classList.remove('hidden');
+            document.getElementById('block-menu-modal').classList.add('flex');
+        }
+
+        function hideBlockMenu() {
+            document.getElementById('block-menu-modal').classList.add('hidden');
+            document.getElementById('block-menu-modal').classList.remove('flex');
+            currentAfterBlockId = null;
+        }
+
+        // Page operations
+        function createNewPage() {
+            const title = prompt('Título de la nueva página:') || 'Página sin título';
+            const id = `page-${Date.now()}`;
+            
+            pages[id] = {
+                id: id,
+                title: title,
+                blocks: [
+                    {
+                        id: `block-${blockCounter++}`,
+                        type: 'paragraph',
+                        content: ''
+                    }
+                ]
+            };
+            
+            selectPage(id);
+            updatePagesList();
+            updatePageCount();
+        }
+
+        function selectPage(pageId) {
+            currentPageId = pageId;
+            renderPage();
+            
+            // Update sidebar selection
+            document.querySelectorAll('.page-item').forEach(item => {
+                item.classList.remove('bg-gray-100');
+            });
+            const pageElement = document.querySelector(`[onclick="selectPage('${pageId}')"]`);
+            if (pageElement) {
+                pageElement.classList.add('bg-gray-100');
+            }
+        }
+
+        function updatePageTitle(newTitle) {
+            pages[currentPageId].title = newTitle;
+            document.getElementById('page-title').textContent = newTitle;
+            updatePagesList();
+            saveToStorage();
+        }
+
+        function updatePagesList() {
+            const container = document.getElementById('pages-list');
+            container.innerHTML = '';
+            
+            Object.values(pages).forEach(page => {
+                const div = document.createElement('div');
+                div.className = `page-item flex items-center gap-2 px-2 py-1 text-sm text-gray-700 hover:bg-gray-100 rounded cursor-pointer ${page.id === currentPageId ? 'bg-gray-100' : ''}`;
+                div.onclick = () => selectPage(page.id);
+                div.innerHTML = `
+                    <span>📄</span>
+                    <span class="truncate">${escapeHtml(page.title)}</span>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function updatePageCount() {
+            document.getElementById('page-count').textContent = Object.keys(pages).length;
+        }
+
+        function updateBlockCount() {
+            const count = pages[currentPageId].blocks.length;
+            document.getElementById('block-count').textContent = `${count} bloque${count !== 1 ? 's' : ''}`;
+        }
+
+        // AI Assistant
+        function showAIAssistant() {
+            document.getElementById('ai-modal').classList.remove('hidden');
+            document.getElementById('ai-modal').classList.add('flex');
+        }
+
+        function hideAIAssistant() {
+            document.getElementById('ai-modal').classList.add('hidden');
+            document.getElementById('ai-modal').classList.remove('flex');
+        }
+
+        function generateWithAI() {
+            const action = document.getElementById('ai-action').value;
+            const prompt = document.getElementById('ai-prompt').value;
+            
+            if (!prompt.trim()) {
+                alert('Por favor, escribe un prompt');
+                return;
+            }
+
+            // Simulate AI generation
+            let generatedContent = '';
+            switch (action) {
+                case 'generate':
+                    generatedContent = `Contenido generado basado en: "${prompt}".\n\nEste es un ejemplo de contenido que podría generar la IA. En una implementación real, esto conectaría con OpenRouter API para generar contenido usando modelos como Claude Sonnet-4.`;
+                    break;
+                case 'improve':
+                    generatedContent = `Versión mejorada del texto: "${prompt}".\n\nEsta sería una versión más profesional y pulida del contenido original.`;
+                    break;
+                case 'summarize':
+                    generatedContent = `Resumen de: "${prompt}".\n\nPuntos clave:\n• Punto principal 1\n• Punto principal 2\n• Conclusión importante`;
+                    break;
+                case 'ideas':
+                    generatedContent = `Ideas relacionadas con: "${prompt}":\n\n• Idea 1: Enfoque innovador\n• Idea 2: Perspectiva diferente\n• Idea 3: Solución creativa\n• Idea 4: Aplicación práctica\n• Idea 5: Desarrollo futuro`;
+                    break;
+            }
+
+            // Add as new block
+            addBlock('paragraph');
+            setTimeout(() => {
+                const lastBlock = pages[currentPageId].blocks[pages[currentPageId].blocks.length - 1];
+                if (lastBlock) {
+                    updateBlock(lastBlock.id, generatedContent);
+                    renderPage();
+                }
+            }, 100);
+            
+            hideAIAssistant();
+            
+            // Clear form
+            document.getElementById('ai-prompt').value = '';
+        }
+
+        // Templates
+        const templates = [
+            {
+                id: 'meeting',
+                name: 'Notas de Reunión',
+                description: 'Estructura tus notas de reunión con agenda y elementos de acción',
+                blocks: [
+                    { type: 'heading', content: 'Notas de Reunión - [Fecha]' },
+                    { type: 'heading', content: 'Asistentes' },
+                    { type: 'list', content: 'Agregar nombres aquí' },
+                    { type: 'heading', content: 'Agenda' },
+                    { type: 'list', content: 'Punto de agenda 1' },
+                    { type: 'heading', content: 'Elementos de Acción' },
+                    { type: 'todo', content: 'Elemento de acción 1', checked: false }
+                ]
+            },
+            {
+                id: 'project',
+                name: 'Plan de Proyecto',
+                description: 'Plantilla de planificación de proyecto con cronograma',
+                blocks: [
+                    { type: 'heading', content: 'Plan de Proyecto: [Nombre]' },
+                    { type: 'heading', content: 'Resumen del Proyecto' },
+                    { type: 'paragraph', content: 'Descripción breve de los objetivos...' },
+                    { type: 'heading', content: 'Cronograma y Hitos' },
+                    { type: 'todo', content: 'Hito 1: Inicio del proyecto', checked: false },
+                    { type: 'heading', content: 'Entregables Clave' },
+                    { type: 'list', content: 'Entregable 1' }
+                ]
+            },
+            {
+                id: 'journal',
+                name: 'Diario Personal',
+                description: 'Reflexiona sobre tu día con prompts para gratitud y objetivos',
+                blocks: [
+                    { type: 'heading', content: 'Diario - [Fecha]' },
+                    { type: 'heading', content: '🙏 Por lo que estoy agradecido' },
+                    { type: 'list', content: 'Algo por lo que estás agradecido...' },
+                    { type: 'heading', content: '🎉 Logros de hoy' },
+                    { type: 'list', content: '¿Qué lograste hoy?' },
+                    { type: 'heading', content: '🎯 Objetivos para mañana' },
+                    { type: 'todo', content: 'Objetivo para mañana...', checked: false }
+                ]
+            },
+            {
+                id: 'recipe',
+                name: 'Receta',
+                description: 'Organiza tus recetas favoritas con ingredientes e instrucciones',
+                blocks: [
+                    { type: 'heading', content: '[Nombre de la Receta]' },
+                    { type: 'paragraph', content: 'Tiempo de prep: [X] min | Tiempo de cocción: [X] min | Porciones: [X]' },
+                    { type: 'heading', content: '🛒 Ingredientes' },
+                    { type: 'list', content: '1 taza de [ingrediente]' },
+                    { type: 'heading', content: '👨‍🍳 Instrucciones' },
+                    { type: 'list', content: 'Primer paso de preparación...' },
+                    { type: 'heading', content: '📝 Notas' },
+                    { type: 'paragraph', content: 'Consejos adicionales o variaciones...' }
+                ]
+            }
+        ];
+
+        function renderTemplates() {
+            // This will be called when templates modal is shown
+        }
+
+        function showTemplates() {
+            const grid = document.getElementById('templates-grid');
+            grid.innerHTML = '';
+            
+            templates.forEach(template => {
+                const div = document.createElement('div');
+                div.className = 'bg-gray-50 rounded-lg p-4 hover:bg-gray-100 cursor-pointer border';
+                div.onclick = () => useTemplate(template);
+                div.innerHTML = `
+                    <h4 class="font-semibold text-gray-900 mb-2">${escapeHtml(template.name)}</h4>
+                    <p class="text-sm text-gray-600 mb-3">${escapeHtml(template.description)}</p>
+                    <span class="text-xs text-gray-500">${template.blocks.length} bloques</span>
+                `;
+                grid.appendChild(div);
+            });
+            
+            document.getElementById('templates-modal').classList.remove('hidden');
+            document.getElementById('templates-modal').classList.add('flex');
+        }
+
+        function hideTemplates() {
+            document.getElementById('templates-modal').classList.add('hidden');
+            document.getElementById('templates-modal').classList.remove('flex');
+        }
+
+        function useTemplate(template) {
+            const title = template.name;
+            const id = `page-${Date.now()}`;
+            
+            pages[id] = {
+                id: id,
+                title: title,
+                blocks: template.blocks.map(block => ({
+                    ...block,
+                    id: `block-${blockCounter++}`
+                }))
+            };
+            
+            selectPage(id);
+            updatePagesList();
+            updatePageCount();
+            hideTemplates();
+            
+            // Show success message
+            alert(`Plantilla "${template.name}" aplicada exitosamente`);
+        }
+
+        // Initialize the app when page loads
+        window.addEventListener('load', init);
+        
+        // Auto-save every 30 seconds
+        setInterval(saveToStorage, 30000);
+    </script>
+</body>
+</html>
